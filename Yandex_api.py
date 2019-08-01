@@ -10,9 +10,17 @@ from dataclasses import dataclass
 
 @dataclass()
 class YandexApi:
-
     images = []
     album = []
+
+    def create_request(self, text='', size='', color='', type=''):
+        """
+        :param text: title of search e.g. boobs
+        :param size: large or medium or small
+        :param color: what color of image to search
+        :param type: type of image available: jpg, png, gifan for gif
+        :return: url request
+        """
 
     def parse_images(self, text='', size='', color='', type='') -> list:
         """
@@ -37,12 +45,12 @@ class YandexApi:
     def download_images(self):
         # скачиваем изображения в папку
         n = 0
-        for el in self.album:
+        for el in self.parse_images(text='космос'):
             url = 'https://' + el
-            wget.download(url, out=f'/path/to/dir/{n}')
+            wget.download(url, out=f'/root/PycharmProjects/Yandex_photos_downloader/album/{n}')
             n += 1
 
 
-yapi = YandexApi()
-yapi.parse_images(text='')
-yapi.download_images()
+if __name__ == '__main__':
+    yapi = YandexApi()
+    yapi.download_images()
