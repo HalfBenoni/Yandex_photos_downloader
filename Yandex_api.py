@@ -32,7 +32,7 @@ class YandexApi:
 
         print(newIP)
 
-    def create_params(self, text, page_num=None, size=None, color=None, file=None) -> str:
+    def create_params(self, text, page_num=None, size=None, color=None, file=None) -> dict:
         """
         :param page_num: number of pages to be parsed
         :param text: title of search e.g. boobs (is required)
