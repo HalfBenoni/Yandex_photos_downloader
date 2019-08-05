@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import requests
-import wget
-from bs4 import BeautifulSoup
-from dataclasses import dataclass
-from fake_useragent import UserAgent
-import time
 import os
+import time
+import wget
 import socks
 import socket
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import unquote
+from dataclasses import dataclass
+from fake_useragent import UserAgent
 
 
 @dataclass()
@@ -27,7 +28,7 @@ class YandexApi:
 
         # перезапускаем tor для смены IP
         os.system('service tor restart')
-        time.sleep(3)
+        time.sleep(5)
 
         ip = requests.get('http://checkip.dyndns.org').content
         soup = BeautifulSoup(ip, 'html.parser')
@@ -60,7 +61,7 @@ class YandexApi:
 
         return params
 
-    def get_image_links(self, num_of_pages) -> list:
+    def get_preview_images(self, num_of_pages) -> list:
         """
         :param num_of_pages: number of pages you want to parse
         (1 page is a visible part of screen equals to 30 img or smth like that)
@@ -97,6 +98,7 @@ class YandexApi:
     def get_orinal_images(self, num_of_pages) -> list:
 
         orig_album = []
+        links = []
 
         url = 'https://yandex.ru/images/search'
         header = {'User-Agent': UserAgent().chrome}
@@ -110,26 +112,53 @@ class YandexApi:
 
             items = bs.findAll("a", {"class": "serp-item__link"})
 
+            # формируем список из форматированных сллыок на первоисточники изображений
             for img in items:
-                orig_album.append(img.attrs['href'])
+                orig_album.append(img.attrs['href'][1:])
 
             cur_page += 1
             time.sleep(5)
 
-        return orig_album
+        for el in orig_album:
+            s = unquote(el)
+            links.append(s.split('&')[3][8:])
 
-    def download_images(self):
-        # скачиваем изображения в папку
+        return links
 
-        n = 1  # имена изображен
-        for el in self.get_image_links(num_of_pages=3):
+    def download_preview_images(self):
+
+        n = 0  # имена изображений
+        for el in self.get_preview_images(num_of_pages=3):
             # формируем корректную ссылку для скачивания
             link = 'https://' + el
-            wget.download(link, out=f'/root/PycharmProjects/Yandex_photos_downloader/album/{n}')
+            wget.download(link, out=f'/root/PycharmProjects/Yandex_photos_downloader/preview_album/{n}')
             n += 1
+
+    def download_origin_images(self):
+        # скачиваем изображения в папку
+
+        n = 0  # имена изображений
+        for el in self.get_orinal_images(num_of_pages=1):
+            try:
+                requests.get(el, timeout=5)  # проверяеем, отвечает ли сайт на запрос
+                wget.download(el, out=f'/root/PycharmProjects/Yandex_photos_downloader/origin_album/{n}')
+                n += 1
+
+            except OSError as e:
+                # если сайт отказывает в доступе, пропускаем его
+                print(e)
+                print('следующее изображение')
+                # changeIP()
+                continue
+
+            except requests.exceptions.Timeout as errt:
+                # если сайт не отвечает, пропускаем его
+                print("Timeout Error:", errt)
+                continue
 
 
 if __name__ == '__main__':
     yapi = YandexApi()
-    yapi.download_images()
     yapi.changeIP()
+    yapi.download_origin_images()
+    # yapi.get_orinal_images(num_of_pages=1)
