@@ -14,8 +14,11 @@ import socket
 
 @dataclass()
 class YandexApi:
-    images = []
-    album = []
+    """
+    to start changing IP run:
+    ~# service tor start (on Unix)
+    ~# tor (on osX)
+    """
 
     def changeIP(self):
 
@@ -41,9 +44,7 @@ class YandexApi:
         :param file: type of image available: jpg for jpeg, png & gifan for gif
         :return: a url request
         """
-        params = {}
-
-        params['text'] = text
+        params = {'text': text}
 
         if page_num is not None:
             params['p'] = page_num
@@ -57,9 +58,6 @@ class YandexApi:
         if file is not None:
             params['itype'] = file
 
-        # req = requests.get(url, params=params)
-        # print(req.url)
-
         return params
 
     def get_image_links(self, num_of_pages) -> list:
@@ -72,6 +70,7 @@ class YandexApi:
         url = 'https://yandex.ru/images/search'
         header = {'User-Agent': UserAgent().chrome}
         cur_page = 0  # current page (0 at the bening)
+        images = []
 
         while cur_page != num_of_pages:
             # при каждой итерации будет меняться параметр page_num
@@ -84,7 +83,7 @@ class YandexApi:
 
             for img in items:
                 # формируем список из ссылок на изображения, находящихся в атрибуте src
-                self.images.append(img.attrs['src'][2:])
+                images.append(img.attrs['src'][2:])
 
             cur_page += 1
             time.sleep(5)
@@ -93,7 +92,7 @@ class YandexApi:
         #     print(el)
         # print(len(self.images))
 
-        return self.images
+        return images
 
     def get_orinal_images(self, num_of_pages) -> list:
 
