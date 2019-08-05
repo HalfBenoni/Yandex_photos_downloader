@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import requests
 import wget
+from bs4 import BeautifulSoup
 from dataclasses import dataclass
 from fake_useragent import UserAgent
-from TorCrawler import TorCrawler
 import time
+import os
+import socks
+import socket
 
 
 @dataclass()
@@ -13,7 +17,22 @@ class YandexApi:
     images = []
     album = []
 
-    def create_params(self, text, page_num=None, size=None, color=None, file=None) -> dict:
+    def changeIP(self):
+
+        socks.set_default_proxy(socks.SOCKS5, "127.0.0.1", 9050)
+        socket.socket = socks.socksocket
+
+        # перезапускаем tor для смены IP
+        os.system('service tor restart')
+        time.sleep(3)
+
+        ip = requests.get('http://checkip.dyndns.org').content
+        soup = BeautifulSoup(ip, 'html.parser')
+        newIP = soup.find('body').text
+
+        print(newIP)
+
+    def create_params(self, text, page_num=None, size=None, color=None, file=None) -> str:
         """
         :param page_num: number of pages to be parsed
         :param text: title of search e.g. boobs (is required)
@@ -50,21 +69,18 @@ class YandexApi:
         :return a list of links to the images
         """
 
-        crawler = TorCrawler(ctrl_pass='16:3DE78CE013BBC3AC60E6045CE1310E5C95BF78DBC300B592796399FE46')
-
         url = 'https://yandex.ru/images/search'
         header = {'User-Agent': UserAgent().chrome}
         cur_page = 0  # current page (0 at the bening)
 
         while cur_page != num_of_pages:
-
+            # при каждой итерации будет меняться параметр page_num
             param = self.create_params(text='космос', page_num=cur_page, color='black')
-            req = crawler.get(url, headers=header, params=param)
 
-            items = req.findAll("img", {"class": "serp-item__thumb justifier__thumb"})
+            req = requests.get(url, headers=header, params=param).text
+            bs = BeautifulSoup(req, features="html.parser")
 
-            for img in items:
-                self.images.append(img.attrs['src'])
+            items = bs.findAll("img", {"class": "serp-item__thumb justifier__thumb"})
 
             for img in items:
                 # формируем список из ссылок на изображения, находящихся в атрибуте src
@@ -83,8 +99,6 @@ class YandexApi:
 
         orig_album = []
 
-        crawler = TorCrawler(ctrl_pass='16:3DE78CE013BBC3AC60E6045CE1310E5C95BF78DBC300B592796399FE46')
-
         url = 'https://yandex.ru/images/search'
         header = {'User-Agent': UserAgent().chrome}
         cur_page = 0  # current page (0 at the bening)
@@ -92,9 +106,10 @@ class YandexApi:
         while cur_page != num_of_pages:
 
             param = self.create_params(text='космос', page_num=cur_page, color='black')
-            req = crawler.get(url, headers=header, params=param)
+            req = requests.get(url, headers=header, params=param).text
+            bs = BeautifulSoup(req, features="html.parser")
 
-            items = req.findAll("a", {"class": "serp-item__link"})
+            items = bs.findAll("a", {"class": "serp-item__link"})
 
             for img in items:
                 orig_album.append(img.attrs['href'])
@@ -107,7 +122,7 @@ class YandexApi:
     def download_images(self):
         # скачиваем изображения в папку
 
-        n = 1  # имена изображений
+        n = 1  # имена изображен
         for el in self.get_image_links(num_of_pages=3):
             # формируем корректную ссылку для скачивания
             link = 'https://' + el
@@ -118,4 +133,4 @@ class YandexApi:
 if __name__ == '__main__':
     yapi = YandexApi()
     yapi.download_images()
-    # yapi.get_image_links(num_of_pages=3)
+    yapi.changeIP()
