@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import time
 import requests
 import wget
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
+from fake_useragent import UserAgent
+import time
 
 
 @dataclass()
@@ -13,7 +14,7 @@ class YandexApi:
     images = []
     album = []
 
-    def create_params(self, text, page_num=None, size=None, color=None, file=None) -> str:
+    def create_params(self, text, page_num=None, size=None, color=None, file=None) -> dict:
         """
         :param page_num: number of pages to be parsed
         :param text: title of search e.g. boobs (is required)
@@ -41,46 +42,75 @@ class YandexApi:
 
         return params
 
-    def parse_images(self, num_of_pages) -> list:
+    def get_image_links(self, num_of_pages) -> list:
         """
-        :param num_of_pages: number of pages you want to parse
-        (1 page is a visible part of screen or smth like that)
+        :param num_of_pages: number of pages you want to parse 
+        (1 page is a visible part of screen equals to 30 img or smth like that)
         :return a list of links to the images
         """
+
         url = 'https://yandex.ru/images/search'
+        header = {'User-Agent': UserAgent().chrome}
+        cur_page = 0  # current page (0 at the bening)
+
+        while cur_page != num_of_pages:
+            # при каждой итерации будет меняться параметр page_num
+            param = self.create_params(text='космос', page_num=cur_page, color='black')
+
+            req = requests.get(url, headers=header, params=param).text
+            bs = BeautifulSoup(req, features="html.parser")
+
+            items = bs.findAll("img", {"class": "serp-item__thumb justifier__thumb"})
+
+            for img in items:
+                # формируем список из ссылок на изображения, находящихся в атрибуте src
+                self.images.append(img.attrs['src'][2:])
+
+            cur_page += 1
+            time.sleep(5)
+
+        # for el in self.images:
+        #     print(el)
+        # print(len(self.images))
+
+        return self.images
+
+    def get_orinal_images(self, num_of_pages) -> list:
+
+        orig_album = []
+
+        url = 'https://yandex.ru/images/search'
+        header = {'User-Agent': UserAgent().chrome}
         cur_page = 0  # current page (0 at the bening)
 
         while cur_page != num_of_pages:
 
-            req = requests.get(url, params=self.create_params(text='космос', page_num=cur_page, color='white')).text
-
+            param = self.create_params(text='космос', page_num=cur_page, color='black')
+            req = requests.get(url, headers=header, params=param).text
             bs = BeautifulSoup(req, features="html.parser")
-            items = bs.findAll("img", {"class": "serp-item__thumb justifier__thumb"})
 
-            # for img in items:
-            #     print(img)
+            items = bs.findAll("a", {"class": "serp-item__link"})
 
             for img in items:
-                self.images.append(str(img))
-            for el in self.images:
-                print(el)
-            # for el in self.images:
-            #     self.album.append(el.split(' ')[-1][7:-3])
+                orig_album.append(img.attrs['href'])
+
             cur_page += 1
+            time.sleep(5)
 
-        # print(self.album)
-        # print(len(self.album))
-        # return self.album
+        return orig_album
 
-    # def download_images(self):
-    #     # скачиваем изображения в папку
-    #     n = 1
-    #     for el in self.parse_images(text='космос'):
-    #         url = 'https://' + el
-    #         wget.download(url, out=f'/root/PycharmProjects/Yandex_photos_downloader/album/{n}')
-    #         n += 1
+    def download_images(self):
+        # скачиваем изображения в папку
+
+        n = 1  # имена изображений
+        for el in self.get_image_links(num_of_pages=3):
+            # формируем корректную ссылку для скачивания
+            link = 'https://' + el
+            wget.download(link, out=f'/root/PycharmProjects/Yandex_photos_downloader/album/{n}')
+            n += 1
 
 
 if __name__ == '__main__':
     yapi = YandexApi()
-    yapi.parse_images(num_of_pages=3)
+    yapi.download_images()
+    # yapi.get_image_links(num_of_pages=3)
