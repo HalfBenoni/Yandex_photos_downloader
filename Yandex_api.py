@@ -7,6 +7,7 @@ import wget
 import socks
 import socket
 import requests
+import subprocess
 from bs4 import BeautifulSoup
 from urllib.parse import unquote
 from dataclasses import dataclass
@@ -61,7 +62,7 @@ class YandexApi:
 
         return params
 
-    def get_preview_images(self, num_of_pages) -> list:
+    def get_preview_images(self, num_of_pages: int) -> list:
         """
         :param num_of_pages: number of pages you want to parse
         (1 page is a visible part of screen equals to 30 img or smth like that)
@@ -95,7 +96,7 @@ class YandexApi:
 
         return images
 
-    def get_orinal_images(self, num_of_pages) -> list:
+    def get_orinal_images(self, num_of_pages: int) -> list:
 
         orig_album = []
         links = []
@@ -122,43 +123,81 @@ class YandexApi:
         for el in orig_album:
             s = unquote(el)
             links.append(s.split('&')[3][8:])
-
+        for el in links:
+            print(el)
         return links
 
-    def download_preview_images(self):
+    def download_preview_images(self) -> 'small images':
 
         n = 0  # имена изображений
-        for el in self.get_preview_images(num_of_pages=3):
+        for el in self.get_preview_images(num_of_pages=1):
             # формируем корректную ссылку для скачивания
             link = 'https://' + el
-            wget.download(link, out=f'/root/PycharmProjects/Yandex_photos_downloader/preview_album/{n}')
-            n += 1
+            # # wget.download(link, out=f'/root/PycharmProjects/Yandex_photos_downloader/preview_album/{n}')
+            # os.system(f'wget -t 2 -nc -P /root/PycharmProjects/Yandex_photos_downloader/preview_album/ {link}')
+            # n += 1
+            try:
+                # в случае, если выполнение систмной команды wget приводит к ошибке,
+                # выполнение передается модулю python wget
+                subprocess.check_output(f'wget -t 2 -nc -P /root/PycharmProjects/Yandex_photos_downloader/preview_album/ {link}', shell = True)
 
-    def download_origin_images(self):
+            except subprocess.CalledProcessError as e:
+                print(e)
+
+                try:
+                    requests.get(link, timeout=5)  # проверяеем, отвечает ли сайт на запрос
+                    wget.download(link, out=f'/root/PycharmProjects/Yandex_photos_downloader/preview_album/{n}')
+                    n += 1
+
+                except OSError as e:
+                    # если сайт отказывает в доступе, пропускаем его
+                    print(e)
+                    print('следующее изображение\n')
+                    # changeIP()
+                    continue
+
+                except requests.exceptions.Timeout as errt:
+                    # если сайт не отвечает, пропускаем его
+                    print("Timeout Error:", errt)
+                    print('Сайт не отвечает\n')
+                    continue
+
+    def download_origin_images(self) -> 'HQ images':
         # скачиваем изображения в папку
 
         n = 0  # имена изображений
-        for el in self.get_orinal_images(num_of_pages=1):
+        for url in self.get_orinal_images(num_of_pages=1):
             try:
-                requests.get(el, timeout=5)  # проверяеем, отвечает ли сайт на запрос
-                wget.download(el, out=f'/root/PycharmProjects/Yandex_photos_downloader/origin_album/{n}')
-                n += 1
+                # в случае, если выполнение систмной команды wget приводит к ошибке,
+                # выполнение передается модулю python wget
+                subprocess.check_output(f'wget -t 2 -T 5 -nc -P /root/PycharmProjects/Yandex_photos_downloader/origin_album/ {url}', shell = True)
 
-            except OSError as e:
-                # если сайт отказывает в доступе, пропускаем его
+            except subprocess.CalledProcessError as e:
                 print(e)
-                print('следующее изображение')
-                # changeIP()
-                continue
 
-            except requests.exceptions.Timeout as errt:
-                # если сайт не отвечает, пропускаем его
-                print("Timeout Error:", errt)
-                continue
+                try:
+                    requests.get(url, timeout=5)  # проверяеем, отвечает ли сайт на запрос
+                    wget.download(url, out=f'/root/PycharmProjects/Yandex_photos_downloader/origin_album/{n}')
+                    n += 1
+
+                except OSError as e:
+                    # если сайт отказывает в доступе, пропускаем его
+                    print(e)
+                    print('следующее изображение\n')
+                    # changeIP()
+                    continue
+
+                except requests.exceptions.Timeout as errt:
+                    # если сайт не отвечает, пропускаем его
+                    print("Timeout Error:", errt)
+                    print('Сайт не отвечает\n')
+                    continue
+
 
 
 if __name__ == '__main__':
     yapi = YandexApi()
     yapi.changeIP()
     yapi.download_origin_images()
-    # yapi.get_orinal_images(num_of_pages=1)
+    yapi.download_preview_images()
+
