@@ -16,21 +16,26 @@ from fake_useragent import UserAgent
 
 @dataclass()
 class YandexApi:
-    """
-    to start changing IP run:
-    ~# service tor start (on Unix)
-    ~# tor (on osX)
-    """
+    images = []  # a list for preview images's links
+    links = []  # a list for origin. images's links
+    url = 'https://yandex.ru/images/search'
+    header = {'User-Agent': UserAgent().chrome}
+    cur_page = 0  # current page (0 at the bening)
 
-    def changeIP(self):
-
+    def changeIP(self) -> 'new IP':
+        """
+        to allow IP changing run:
+        ~# service tor start (on Unix)
+        ~# tor (on osX)
+        """
         socks.set_default_proxy(socks.SOCKS5, "127.0.0.1", 9050)
         socket.socket = socks.socksocket
 
-        # перезапускаем tor для смены IP
+        # reboot tor for IP changing
         os.system('service tor restart')
         time.sleep(5)
 
+        # get the IP value
         ip = requests.get('http://checkip.dyndns.org').content
         soup = BeautifulSoup(ip, 'html.parser')
         newIP = soup.find('body').text
@@ -62,142 +67,131 @@ class YandexApi:
 
         return params
 
-    def get_preview_images(self, num_of_pages: int) -> list:
+    def get_preview_images(self, num_of_pages: int) -> 'small images':
         """
         :param num_of_pages: number of pages you want to parse
         (1 page is a visible part of screen equals to 30 img or smth like that)
         :return a list of links to the images
         """
+        while self.cur_page != num_of_pages:
+            # each iteration will change the page_num parameter
+            param = self.create_params(text='космос', page_num=self.cur_page, color='black')
 
-        url = 'https://yandex.ru/images/search'
-        header = {'User-Agent': UserAgent().chrome}
-        cur_page = 0  # current page (0 at the bening)
-        images = []
-
-        while cur_page != num_of_pages:
-            # при каждой итерации будет меняться параметр page_num
-            param = self.create_params(text='космос', page_num=cur_page, color='black')
-
-            req = requests.get(url, headers=header, params=param).text
+            req = requests.get(self.url, headers=self.header, params=param).text
             bs = BeautifulSoup(req, features="html.parser")
-
             items = bs.findAll("img", {"class": "serp-item__thumb justifier__thumb"})
 
+            # create a list of links to images that are in the src attribute
             for img in items:
-                # формируем список из ссылок на изображения, находящихся в атрибуте src
-                images.append(img.attrs['src'][2:])
+                self.images.append(img.attrs['src'][2:])
 
-            cur_page += 1
+            self.cur_page += 1
             time.sleep(5)
 
-        # for el in self.images:
-        #     print(el)
-        # print(len(self.images))
+        self.download_preview_images()
 
-        return images
-
-    def get_orinal_images(self, num_of_pages: int) -> list:
+    def get_orinal_images(self, num_of_pages: int) -> 'HQ images':
 
         orig_album = []
-        links = []
 
-        url = 'https://yandex.ru/images/search'
-        header = {'User-Agent': UserAgent().chrome}
-        cur_page = 0  # current page (0 at the bening)
+        while self.cur_page != num_of_pages:
 
-        while cur_page != num_of_pages:
-
-            param = self.create_params(text='космос', page_num=cur_page, color='black')
-            req = requests.get(url, headers=header, params=param).text
+            param = self.create_params(text='космос', page_num=self.cur_page, color='black')
+            req = requests.get(self.url, headers=self.header, params=param).text
             bs = BeautifulSoup(req, features="html.parser")
-
             items = bs.findAll("a", {"class": "serp-item__link"})
 
-            # формируем список из форматированных сллыок на первоисточники изображений
+            # create a list of formatted links to primary sources of images
             for img in items:
                 orig_album.append(img.attrs['href'][1:])
 
-            cur_page += 1
+            self.cur_page += 1
             time.sleep(5)
 
         for el in orig_album:
             s = unquote(el)
-            links.append(s.split('&')[3][8:])
-        for el in links:
-            print(el)
-        return links
+            self.links.append(s.split('&')[3][8:])
 
-    def download_preview_images(self) -> 'small images':
+        self.download_origin_images()
 
-        n = 0  # имена изображений
-        for el in self.get_preview_images(num_of_pages=1):
-            # формируем корректную ссылку для скачивания
+    def download_preview_images(self):
+        # download images to the folder
+        direc = self.folder('preview_album')
+        n = 0  # image name (required for python wget module)
+
+        for el in self.images:
+            # form the correct download link
             link = 'https://' + el
-            # # wget.download(link, out=f'/root/PycharmProjects/Yandex_photos_downloader/preview_album/{n}')
-            # os.system(f'wget -t 2 -nc -P /root/PycharmProjects/Yandex_photos_downloader/preview_album/ {link}')
-            # n += 1
             try:
-                # в случае, если выполнение систмной команды wget приводит к ошибке,
-                # выполнение передается модулю python wget
-                subprocess.check_output(f'wget -t 2 -nc -P /root/PycharmProjects/Yandex_photos_downloader/preview_album/ {link}', shell = True)
+                # if the wget system command fails,
+                # the execution is passed to the python wget module
+                subprocess.check_output(f'wget -t 2 -nc -P {direc} {link}', shell=True)
 
             except subprocess.CalledProcessError as e:
                 print(e)
 
                 try:
-                    requests.get(link, timeout=5)  # проверяеем, отвечает ли сайт на запрос
-                    wget.download(link, out=f'/root/PycharmProjects/Yandex_photos_downloader/preview_album/{n}')
+                    requests.get(link, timeout=5)  # check if the site responds to the request
+                    wget.download(link, out=f'{direc}/{n}')
                     n += 1
 
                 except OSError as e:
-                    # если сайт отказывает в доступе, пропускаем его
+                    # if the site denies access, skip it
                     print(e)
                     print('следующее изображение\n')
-                    # changeIP()
                     continue
 
-                except requests.exceptions.Timeout as errt:
-                    # если сайт не отвечает, пропускаем его
-                    print("Timeout Error:", errt)
+                except requests.exceptions.Timeout as err:
+                    # if the site does not respond, skip it
+                    print("Timeout Error:", err)
                     print('Сайт не отвечает\n')
                     continue
 
-    def download_origin_images(self) -> 'HQ images':
-        # скачиваем изображения в папку
+    def download_origin_images(self):
+        # download images to the folder
+        direc = self.folder('origin_album')
+        n = 0  # image name (required for python wget module)
 
-        n = 0  # имена изображений
-        for url in self.get_orinal_images(num_of_pages=1):
+        for url in self.links:
             try:
-                # в случае, если выполнение систмной команды wget приводит к ошибке,
-                # выполнение передается модулю python wget
-                subprocess.check_output(f'wget -t 2 -T 5 -nc -P /root/PycharmProjects/Yandex_photos_downloader/origin_album/ {url}', shell = True)
+                # if the wget system command fails,
+                # the execution is passed to the python wget module
+                subprocess.check_output(f'wget -t 2 -nc -P {direc} {url}', shell=True)
 
             except subprocess.CalledProcessError as e:
                 print(e)
-
                 try:
-                    requests.get(url, timeout=5)  # проверяеем, отвечает ли сайт на запрос
-                    wget.download(url, out=f'/root/PycharmProjects/Yandex_photos_downloader/origin_album/{n}')
+                    requests.get(url, timeout=5)  # check if the site responds to the request
+                    wget.download(url, out=f'{direc}/{n}')
                     n += 1
 
                 except OSError as e:
-                    # если сайт отказывает в доступе, пропускаем его
+                    # if the site denies access, skip it
                     print(e)
-                    print('следующее изображение\n')
-                    # changeIP()
+                    print('\nследующее изображение')
                     continue
 
-                except requests.exceptions.Timeout as errt:
-                    # если сайт не отвечает, пропускаем его
-                    print("Timeout Error:", errt)
-                    print('Сайт не отвечает\n')
+                except requests.exceptions.Timeout as err:
+                    # if the site does not respond, skip it
+                    print("\nTimeout Error:", err)
+                    print('\nСайт не отвечает')
                     continue
 
+    def folder(self, name: str) -> object:
+        # create a folgers for images
+        if os.path.exists(path=os.getcwd() + '/' + name) is True:
+            print(f"\nFile exists: {os.getcwd()}/{name}")
+
+        else:
+            print(f'Creating a folder: {os.getcwd()}/{name}')
+            os.mkdir(path=os.getcwd() + '/' + name)
+            print('Created')
+
+        return os.path.abspath(f"{os.getcwd()}/{name}")
 
 
 if __name__ == '__main__':
     yapi = YandexApi()
     yapi.changeIP()
-    yapi.download_origin_images()
-    yapi.download_preview_images()
-
+    # yapi.get_preview_images(num_of_pages=1)
+    # yapi.get_orinal_images(num_of_pages=1)
